@@ -46,34 +46,282 @@ class gmail_model extends CI_Model {
             }
             file_put_contents($tokenPath, json_encode($this->client->getAccessToken()));
         }
+
+        $this->service = new Google_Service_Gmail($this->client);
     }
 
     ## EXPERIMENTAL UDFs -------------------------------------------------------------------------------------
 
-    public function add_label($labelName) {
-        //WARNING: REQUIRES MODIFY
-        // Set the name and label list visibility of the new label
-        $labelVisibility = 'labelShow';
+function get_email_by_id($emailId) {
+   
 
-        // Create a Label object with the label name and label visibility
-        $newLabel = new Google_Service_Gmail_Label();
-        $newLabel->setName($labelName);
-        $newLabel->setVisibility($labelVisibility);
+    $message = $this->service->users_messages->get('me', $emailId, ['format' => 'full']);
+    $payload = $message->getPayload();
+    $headers = $payload->getHeaders();
+    $parts = $payload->getParts();
+    $dateSent = '';
+    $toEmail = '';
+    $fromEmail = '';
+    $subject = '';
+    $snippet = $message->getSnippet();
+    $textBody = '';
+    $htmlBody = '';
+    $attachments = [];
 
-        // Call the users.labels.create method to create the new label
-        $createdLabel = $this->service->users_labels->create('me', $newLabel);
-
-        // Output the ID and name of the created label
-        // echo 'Label created with ID: ' . $createdLabel->getId() . ' and name: ' . $createdLabel->getName();    
-        return $createdLabel->getId(); 
+    foreach ($headers as $header) {
+        $name = $header->getName();
+        $value = $header->getValue();
+        
+        if ($name == 'Date') {
+            $dateSent = $value;
+        } else if ($name == 'To') {
+            $toEmail = $value;
+        } else if ($name == 'From') {
+            $fromEmail = $value;
+        } else if ($name == 'Subject') {
+            $subject = $value;
+        }
     }
 
-    public function set_label($messageId,$labelId) {
-        //WARNING: REQUIRES MODIFY
-        // Set the ID of the message you want to modify and the ID of the label you want to apply
-        // $messageId = 'MESSAGE_ID_HERE';
-        // $labelId = 'LABEL_ID_HERE';
+    if (count($parts) == 0) {
+        $textBody = $payload->getBody()->getData();
+    } else {
+        foreach ($parts as $part) {
+            $partHeaders = $part->getHeaders();
+            $partName = $part->getFilename();
+            $partMimeType = $part->getMimeType();
+            $partBody = $part->getBody();
 
+            if ($partName != '' || $partMimeType != '') {
+                $attachments[] = [
+                    'name' => $partName,
+                    'mime_type' => $partMimeType,
+                    'data' => $partBody,
+                ];
+            } else if ($part->getParts() && count($part->getParts()) > 0) {
+                foreach ($part->getParts() as $subpart) {
+                    if ($subpart->getMimeType() == 'text/plain') {
+                        $textBody = $subpart->getBody()->getData();
+                    } else if ($subpart->getMimeType() == 'text/html') {
+                        $htmlBody = $subpart->getBody()->getData();
+                    }
+                }
+            } else if ($part->getMimeType() == 'text/plain' && empty($textBody)) {
+                $textBody = $partBody->getData();
+            } else if ($part->getMimeType() == 'text/html' && empty($htmlBody)) {
+                $htmlBody = $partBody->getData();
+            }
+        }
+    }
+
+    $decodedTextBody = base64_decode(str_replace(['-', '_'], ['+', '/'], $textBody));
+    $decodedHtmlBody = base64_decode(str_replace(['-', '_'], ['+', '/'], $htmlBody));
+
+    return [
+        'message_id' => $message->getId(),
+        'date_sent' => $dateSent,
+        'to_email' => $toEmail,
+        'from_email' => $fromEmail,
+        'subject' => $subject,
+        'snippet' => $snippet,
+        'body' => $decodedHtmlBody,
+        'attachments' => $attachments,
+    ];
+}
+
+
+// public function get_email_by_id2($emailId) {
+//     $message =$this->service->users_messages->get('me', $emailId, ['format' => 'full']);
+//     $payload = $message->getPayload();
+//     $headers = $payload->getHeaders();
+//     $parts = $payload->getParts();
+//     $dateSent = '';
+//     $toEmail = '';
+//     $fromEmail = '';
+//     $subject = '';
+//     $snippet = $message->getSnippet();
+//     $body = '';
+//     $attachments = [];
+
+//     foreach ($headers as $header) {
+//         $name = $header->getName();
+//         $value = $header->getValue();
+        
+//         if ($name == 'Date') {
+//             $dateSent = $value;
+//         } else if ($name == 'To') {
+//             $toEmail = $value;
+//         } else if ($name == 'From') {
+//             $fromEmail = $value;
+//         } else if ($name == 'Subject') {
+//             $subject = $value;
+//         }
+//     }
+
+//     if (count($parts) == 0) {
+//         $body = $payload->getBody()->getData();
+//     } else {
+//         foreach ($parts as $part) {
+//             $partHeaders = $part->getHeaders();
+//             $partName = $part->getFilename();
+//             $partMimeType = $part->getMimeType();
+//             $partBody = $part->getBody();
+
+//             if ($partName != '' || $partMimeType != '') {
+//                 $attachments[] = [
+//                     'name' => $partName,
+//                     'mime_type' => $partMimeType,
+//                     'data' => $partBody,
+//                 ];
+//             } else if ($part->getParts() && count($part->getParts()) > 0) {
+//                 foreach ($part->getParts() as $subpart) {
+//                     if ($subpart->getMimeType() == 'text/plain') {
+//                         $body = $subpart->getBody()->getData();
+//                         break;
+//                     }
+//                 }
+//             } else if ($part->getMimeType() == 'text/plain') {
+//                 $body = $part->getBody()->getData();
+//                 break;
+//             }
+//         }
+//     }
+
+//     $decodedBody = base64_decode(str_replace(['-', '_'], ['+', '/'], $body));
+
+//     return [
+//         'message_id' => $message->getId(),
+//         'date_sent' => $dateSent,
+//         'to_email' => $toEmail,
+//         'from_email' => $fromEmail,
+//         'subject' => $subject,
+//         'snippet' => $snippet,
+//         'body' => $decodedBody,
+//         'attachments' => $attachments,
+//     ];
+// }
+
+
+    ## WORKING UDFs ------------------------------------------------------------------------------------------
+
+
+    public function get_mails($query = 'is:sent'){
+
+        // Retrieve sent emails
+        $userId = 'me';
+        $results = $this->service->users_messages->listUsersMessages($userId, ['q' => $query]);
+
+        // Create array to store email information
+        $emails = [];
+
+        // Loop through the 10 most recent sent emails
+        $count = 0;
+        foreach ($results->getMessages() as $message) {
+          $message = $this->service->users_messages->get($userId, $message->id);
+          $payload = $message->getPayload();
+          $threadId = $message->getThreadId();
+          $message_id = $message->getId();
+
+
+          //display only the original sent message
+          // if ($threadId !== $message_id || $message_id !== '') {
+          //   continue;
+          // }
+
+          $headers = $payload->getHeaders();
+          $subject = '';
+          $message_id = '';
+          $date_sent = '';
+          $label_name = '';
+          $status = '';
+          $labelIds = $message->getLabelIds();
+          foreach ($labelIds as $labelId) {
+            $label = $this->service->users_labels->get($userId, $labelId);
+            $label_name = $label->getName();
+          }
+          foreach ($headers as $header) {
+            if ($header->name == 'Subject') {
+              $subject = $header->value;
+            }
+            // if ($header->name == 'Message-ID') {
+            //   $message_id = $header->value;
+            // }
+            if ($header->name == 'Date') {
+              $date_sent = date('Y-m-d H:i:s', strtotime($header->value));
+            }
+          }
+
+         
+
+          $messageData = $this->service->users_messages->get($userId, $message->getId(), ['format' => 'full']);
+          $headers = $messageData->getPayload()->getHeaders();
+          foreach ($headers as $header) {
+            if ($header->name == 'From') {
+              $from = $header->value;
+            }
+            if ($header->name == 'To') {
+              $to = $header->value;
+            }
+            if ($header->name == 'Date') {
+              $date = $header->value;
+            }
+            if ($header->name == 'Subject') {
+              $subject = $header->value;
+            }
+          }
+          $labelIds = $message->getLabelIds();
+          if (in_array('UNREAD', $labelIds)) {
+            $status = 'Unread';
+          } else {
+            $status = 'Read';
+          }
+
+          // Count number of replies
+          
+          $thread = $this->service->users_threads->get($userId, $threadId, ['format' => 'full']);
+          if ($thread->getMessages() != null) {
+            $num_replies = count($thread->getMessages()) - 1;
+          }
+
+          // Add email information to array
+          $emails[] = [
+            'subject' => $subject,
+            'message_id' => $message_id,
+            'threadId' => $threadId,
+            'date_sent' => $date_sent,
+            'label_name' => $label_name,
+            'status' => $status,
+            'num_replies' => $num_replies
+          ];
+          $count++;
+          if ($count >= 30) {
+            break;
+          }
+        }
+        return $emails; // Return the emails array outside of the foreach loop
+    }
+
+
+
+    public function delete_email($message_id) {
+        return $this->service->users_messages->trash("me", $message_id);
+    }
+
+    public function getLabels(){
+        
+        $labels = $this->service->users_labels->listUsersLabels('me');
+
+        // Loop through the labels and create an array of label IDs and captions
+        $label_array = array();
+        foreach ($labels as $label) {
+            $label_array[$label->getId()] = $label->getName();
+        }
+        return $label_array;
+    }
+
+    public function set_label($messageId,$labelId ) {
+       
+     
         // Create a ModifyMessageRequest object to specify the label to add
         $modifyRequest = new Google_Service_Gmail_ModifyMessageRequest();
         $modifyRequest->setAddLabelIds(array($labelId));
@@ -82,14 +330,21 @@ class gmail_model extends CI_Model {
         $this->service->users_messages->modify('me', $messageId, $modifyRequest);
     }
 
-    public function delete_email($messageId) {
-        $this->service->users_messages->trash("me", $message_id);
-    }
-    ## WORKING UDFs ------------------------------------------------------------------------------------------
+    public function add_label($labelName,$userId = "me") {
 
+       
+        //WARNING: REQUIRES MODIFY
+        // Create the label
+        $label = new Google_Service_Gmail_Label();
+        $label->setName($labelName);
+
+        $createdLabel = $this->service->users_labels->create($userId, $label);
+
+        return $createdLabel->getId();
+    }
 
     public function send_email($to, $subject, $body, $attachments = array()){
-        $service = new Google_Service_Gmail($this->client);
+
 
         // Replace with the email address of the sender.
         $from = 'aaquinones.fo12@dswd.gov.ph';
@@ -124,7 +379,7 @@ class gmail_model extends CI_Model {
 
         // Encode the message in base64 and send it.
         $message->setRaw(base64_encode($message_text));
-        $send_message = $service->users_messages->send("me", $message);
+        $send_message = $this->service->users_messages->send("me", $message);
 
         return $send_message->getId();
     }
@@ -141,15 +396,14 @@ class gmail_model extends CI_Model {
 
     public function get_email_by_threadID($thread_id) {
         $ds = array();
-        $service = new Google_Service_Gmail($this->client);
-        $thread = $service->users_threads->get('me', $thread_id);
+        $thread = $this->service->users_threads->get('me', $thread_id);
         $messages = $thread->getMessages();
 
         foreach ($messages as $message) {
             $arr_attachment = array();
 
             $messageId = $message->getId();
-            $message = $service->users_messages->get('me', $messageId);
+            $message = $this->service->users_messages->get('me', $messageId);
             $headers = $message->getPayload()->getHeaders();
 
             $msgId = $message->id;
@@ -194,7 +448,7 @@ class gmail_model extends CI_Model {
 
                         // Get the attachment data using the Gmail API
                         $attachmentId = $part->getBody()->getAttachmentId();
-                        $attachment = $service->users_messages_attachments->get('me', $messageId, $attachmentId);
+                        $attachment = $this->service->users_messages_attachments->get('me', $messageId, $attachmentId);
 
                         // Get the attachment data and decode it
                         $attachmentData = base64_decode($attachment->getData());
