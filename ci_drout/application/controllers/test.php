@@ -3,15 +3,17 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 class test extends CI_Controller {
 	
-
-	#error
 	public function index(){
-		$this->load->model('gmail_model');
-		$data = $this->gmail_model->get_email_by_id("1865ea0b9b1e5b2d");
-		print('<pre>');
-		print_r($data);
-		print('</pre>');
+		$this->load->view('viewer');
 	}
+	#error
+	// public function index(){
+	// 	$this->load->model('gmail_model');
+	// 	$data = $this->gmail_model->get_email_by_id("1865ea0b9b1e5b2d");
+	// 	print('<pre>');
+	// 	print_r($data);
+	// 	print('</pre>');
+	// }
 
 	// public function index(){
 	// 	$this->load->model('gmail_model');

@@ -12,7 +12,7 @@ class gmail_model extends CI_Model {
         parent::__construct();
 
         $this->client = new Google_Client();
-        $this->client->setApplicationName('Gmail API PHP Quickstart');
+        $this->client->setApplicationName('APP NAME');
         $this->client->setAuthConfig(APPPATH . 'libraries/google-client-secret.json');
         $this->client->setAccessType('offline');
         $this->client->setPrompt('select_account consent');
